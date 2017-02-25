@@ -7,6 +7,7 @@ struct list_head {
 	struct list_head *next;
 	struct list_head *prev;
 };
+//typedef list_head struct list_head;
 
 #define LIST_POISON1 (void *)0xaabbaabb
 #define LIST_POISON2 (void *)0xbbaabbaa
@@ -70,7 +71,7 @@ static inline void __list_del(struct list_head * prev, struct list_head * next)
 	prev->next = next;
 }
 
-static inline void __list_del_entry(struct list_head *entry)
+static inline void list_for_each_entry(list_for_each_entry(__list_del_entry(struct list_head *entry)
 {
 	__list_del(entry->prev, entry->next);
 }

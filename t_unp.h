@@ -3,6 +3,7 @@
 #undef	MAXLINE
 #define	MAXLINE	20		/* to see datagram truncation */
 
+#include	<arpa/inet.h>
 #include	<errno.h>		/* for definition of errno */
 #include	<fcntl.h>
 #include	<netinet/in.h>
