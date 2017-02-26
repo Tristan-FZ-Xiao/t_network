@@ -214,3 +214,27 @@ void set_block(int fd)
 	int val = Fcntl(fd, F_GETFL, 0);
 	Fcntl(fd, F_SETFL, val & (~O_NONBLOCK));
 }
+
+void set_reuse(int fd)
+{
+	int on = 1;  
+
+	if ((setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on))) < 0) {
+		perror("setsockopt failed");
+		exit(EXIT_FAILURE);
+	}
+}
+
+int check_fd_stat(int fd)
+{
+	struct stat st;
+	int re;
+	
+	re = fstat(fd, &st);
+	if (re != 0)
+	{
+		printf("Fd[%d] stat error: %s", fd, strerror(errno));
+	}
+
+	return re;
+}

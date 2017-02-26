@@ -71,7 +71,7 @@ static inline void __list_del(struct list_head * prev, struct list_head * next)
 	prev->next = next;
 }
 
-static inline void list_for_each_entry(list_for_each_entry(__list_del_entry(struct list_head *entry)
+static inline void __list_del_entry(struct list_head *entry)
 {
 	__list_del(entry->prev, entry->next);
 }

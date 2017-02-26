@@ -1,7 +1,7 @@
 #ifndef __T_UNP_H__
 #define __T_UNP_H__
 #undef	MAXLINE
-#define	MAXLINE	20		/* to see datagram truncation */
+#define	MAXLINE	1024		/* to see datagram truncation */
 
 #include	<arpa/inet.h>
 #include	<errno.h>		/* for definition of errno */
@@ -13,6 +13,7 @@
 #include	<stdarg.h>		/* ANSI C header file */
 #include	<sys/types.h>
 #include	<sys/socket.h>
+#include	<sys/stat.h>
 #include	<sys/time.h>
 #include	<unistd.h>
 static void	err_doit(int, const char *, va_list);
@@ -48,6 +49,8 @@ int Fcntl(int fd, int cmd, int arg);
 void Connect(int fd, const struct sockaddr *sa, socklen_t salen);
 void set_non_block(int fd);
 void set_block(int fd);
+void set_reuse(int fd);
+int check_fd_stat(int fd);
 
 void err_ret(const char *fmt, ...);
 void err_sys(const char *fmt, ...);
