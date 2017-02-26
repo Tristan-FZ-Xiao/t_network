@@ -96,83 +96,134 @@ void ut_thread_mutex(void)
 #define NETWORK_LIB
 #ifdef NETWORK_LIB
 
-#define MAX_CLI_CONN	1024
-
 typedef struct {
 	int fd;
 	struct sockaddr_in src_addr;
-	int used;
+	struct list_head entry;
 } cli_entry;
 
 typedef struct {
-	cli_entry cli_list[MAX_CLI_CONN];
-	int cnt, free;		/* cnt: current used count;
-				 */
-} cli_head;
+	struct list_head free_list;
+	struct list_head inuse_list;
+	int inuse, free;
+} cli_manage;
 
-cli_head cli_list;
+typedef struct {
+	struct sockaddr_in srv_addr;
+	int stat_sendbuf;
+	int stat_speed;
+	int last_time;
+	int duration;
+	cli_manage cli;
+	char *send_buf;
+} cli_info;
 
+cli_info concurrent_cli_info;
 
-int cli_count = MAX_CLI_CONN;
-const char server_addr[] = "192.168.11.230";
-const int server_port = 40000;
-int duration = 100 * 1000; /* test time: ms */
-#define SEND_BUF_SIZE	102400
+void cli_list_init(cli_manage *cli)
+{
+	INIT_LIST_HEAD(&cli->free_list);
+	INIT_LIST_HEAD(&cli->inuse_list);
+}
 
+cli_entry *get_cli(cli_manage *cli)
+{
+	cli_entry *ptr = NULL;
+	
+	if (list_empty(&cli->free_list)) {
+		ptr = (cli_entry *)malloc(sizeof(cli_entry));		
+		if (ptr)
+			memset(ptr, 0, sizeof(cli_entry));
+		else
+			return NULL;
+	}
+	else {
+		ptr = list_entry(cli->free_list.next, typeof(cli_entry), entry);
+		list_del(&ptr->entry);
+		cli->free--;
+	}
+	list_add_tail(&ptr->entry, &cli->inuse_list);
+	cli->inuse++;
+	return ptr;
+}
 
-void buffer_pad(char *buf, int len)
+void free_cli(cli_entry *ptr, cli_manage *cli)
+{
+	close(ptr->fd);
+	list_del(&ptr->entry);
+	cli->inuse--;
+	memset(ptr, 0, sizeof(cli_entry));
+	list_add(&ptr->entry, &cli->free_list);
+	cli->free++;
+}
+
+void cli_print(cli_manage *cli)
+{
+	cli_entry *pos = NULL;
+	int i = 0;
+	
+	printf("Client Info\n");
+	printf("Free\t%d\n", cli->free);
+	printf("No.\t\tfd\t\tfrom_addr\n");
+	list_for_each_entry(pos, &cli->free_list, entry) {
+		printf("%d\t\t%d\t\t%s:%d\n", i++, pos->fd,
+		       inet_ntoa(pos->src_addr.sin_addr), ntohs(pos->src_addr.sin_port));
+	}
+	printf("Inuse\t%d\n", cli->inuse);
+	printf("No.\t\tfd\t\tfrom_addr\n");
+	list_for_each_entry(pos, &cli->inuse_list, entry) {
+		printf("%d\t\t%d\t\t%s:%d\n", i++, pos->fd,
+		       inet_ntoa(pos->src_addr.sin_addr), ntohs(pos->src_addr.sin_port));
+	}
+	fflush(stdout);
+}
+
+void buffer_padding(char *buf, int len)
 {
 	memset(buf, 0x30, len);
 }
 
-cli_entry *get_free_cli_entry(void)
+#define MAX_CLI_CONN	20
+#define SEND_BUF_SIZE	102400
+
+void concurrent_cli_init(cli_info *cli)
 {
-	if (cli_list.cnt < MAX_CLI_CONN)
-	{
-		return &cli_list.cli_list[cli_list.cnt ++];
-	}
-	return NULL;
+	memset(cli, 0, sizeof(cli_info));
+	cli_list_init(&cli->cli);
+	inet_aton("127.0.0.1", &cli->srv_addr.sin_addr);
+	cli->srv_addr.sin_family = AF_INET;
+	cli->srv_addr.sin_port = htons(40000);
+	cli->duration = 100 * 1000;	/* ms */
+	cli->send_buf = malloc(SEND_BUF_SIZE);
+	buffer_padding(cli->send_buf, SEND_BUF_SIZE);
 }
 
-void cli_loop(void)
+void cli_loop(cli_info *cli)
 {
-	int i = 0;
 	int seed = 50000;
-	char send_buf[SEND_BUF_SIZE] = {'\0'};
-	struct sockaddr_in srv_addr;
-	cli_entry *ptr = get_free_cli_entry();
-	int start_time, item_time, cur_time;
-	int stat_sendbuf = 0;
-	
-	memset(&srv_addr, 0, sizeof(srv_addr));
-	srv_addr.sin_family = AF_INET;	
-	inet_aton(server_addr, &srv_addr.sin_addr);
-	srv_addr.sin_port = htons(server_port);
+	cli_entry *ptr = get_cli(&cli->cli);
 
 	ptr->fd = Socket(AF_INET, SOCK_STREAM, 0);
-	//set_non_block(ptr->fd);
 	ptr->src_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 	srand(seed);
 	ptr->src_addr.sin_port = htons(rand_r(&seed));
-	connect_nonb(ptr->fd, (const struct sockaddr *)&srv_addr, sizeof(srv_addr), 5);
-	//snprintf(send_buf, "hello I'm the No.%04d client\n", i);
-	buffer_pad(send_buf, SEND_BUF_SIZE);
-	
-	start_time = item_time = get_now_time();
-	do {
-		Send(ptr->fd, send_buf, SEND_BUF_SIZE, 0);
-		stat_sendbuf += SEND_BUF_SIZE;
-		cur_time = get_now_time();
-
-		if ((cur_time - item_time) > 1000) {
-			printf("(Time: %d ms - %d ms) Send Speed %d KB\n", item_time, cur_time, stat_sendbuf / (cur_time - item_time));
-			item_time = cur_time;
-			stat_sendbuf = 0;
-		}
-	} while ((cur_time - start_time) < duration);
+	connect_nonb(ptr->fd, (const struct sockaddr *)&cli->srv_addr, sizeof(struct sockaddr_in), 5);
+	while (1) {
+		send_tcp(ptr->fd, cli->send_buf, SEND_BUF_SIZE);
+	}	
 	return;	
 }
-	
+
+void cli_thread_init(cli_info *cli)
+{
+	int i = 0;
+	for (; i < MAX_CLI_CONN; i++) {
+		static pthread_t detect_pid;
+
+		pthread_create(&detect_pid, NULL, cli_loop, cli);
+		pthread_detach(detect_pid);
+	}
+}
 #endif /* NETWORK_LIB */
 
 
@@ -187,7 +238,11 @@ int main(int argc, char *argv[])
 #endif /* THREAD_MUTEX_VERIFICATION */
 
 #ifdef NETWORK_LIB
-	cli_loop();	
+	concurrent_cli_init(&concurrent_cli_info);
+	cli_thread_init(&concurrent_cli_info);
+	while (1) {
+		sleep(1);
+	}
 #endif
 
 }

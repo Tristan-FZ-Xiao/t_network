@@ -238,3 +238,44 @@ int check_fd_stat(int fd)
 
 	return re;
 }
+int send_tcp(int fd, const char *buf, int len)
+{
+	int send_len;
+	int sum = 0;
+	int n = 0;
+
+	while (sum < len)
+	{
+		send_len = send(fd, buf + sum, len - sum, 0);
+
+		if (send_len < 0)
+		{
+			if (errno == EINTR)
+			{
+				return sum;
+			}
+			else if (errno == EAGAIN)
+			{
+				n++;
+				if (n > 2)
+				{
+					return sum;
+				}
+				continue;
+			}
+			else
+			{
+				return -1;
+			}
+		}
+		else if (send_len == 0)
+		{
+			return -1;
+		}
+
+		sum = sum + send_len;
+	}
+
+	return sum;
+}
+

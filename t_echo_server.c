@@ -20,6 +20,9 @@ typedef struct {
 	int listen_port;
 	int listen_fd;
 	int max_backlog;
+	int stat_recvbuf;
+	int stat_speed;
+	int last_time;
 	cli_manage cli;
 } server_info;
 
@@ -54,6 +57,7 @@ cli_entry *get_cli(cli_manage *cli)
 
 void free_cli(cli_entry *ptr, cli_manage *cli)
 {
+	close(ptr->fd);
 	list_del(&ptr->entry);
 	cli->inuse--;
 	memset(ptr, 0, sizeof(cli_entry));
@@ -100,6 +104,7 @@ void unit_test_list(void)
 
 void t_echo_server_init(server_info *echo_server_info)
 {
+	memset(echo_server_info, 0, sizeof(server_info));
 	echo_server_info->listen_port = 40000;
 	echo_server_info->max_backlog = 1024;
 	echo_cli_init(&echo_server_info->cli);
@@ -120,12 +125,12 @@ void t_echo_server_loop(server_info *echo_server)
 
 	echo_server->listen_fd = Socket(AF_INET, SOCK_STREAM, 0);
 	set_reuse(echo_server->listen_fd);
+	set_non_block(echo_server->listen_fd);
 	Bind(echo_server->listen_fd, (struct sockaddr *)(&sa), sizeof(sa));
 	Listen(echo_server->listen_fd, echo_server->max_backlog);
 
 	for (;;) {
 		cli_entry *pos, *tmp;
-	
 		int max = 0;
 
 		FD_ZERO(&rset);
@@ -155,17 +160,30 @@ void t_echo_server_loop(server_info *echo_server)
 		list_for_each_entry_safe(pos, tmp, &echo_server->cli.inuse_list, entry) {
 			if (FD_ISSET(pos->fd, &rset)) {
 				memset(buf, 0, MAXLINE);
-				if ((n = readn(pos->fd, (void *)buf, MAXLINE)) != 0)
-				{
-					printf("%s", buf);
-					fflush(stdout);
+				if ((n = readn(pos->fd, (void *)buf, MAXLINE)) != 0) {
+					int current_time = get_now_time();
+
+					echo_server->stat_recvbuf += strlen(buf);
+					if ((current_time - echo_server->last_time) > 5000)
+					{
+						echo_server->last_time = current_time;
+					}
+					else if ((current_time - echo_server->last_time) > 1000) {
+						/*Speed: KB */
+						echo_server->stat_speed = echo_server->stat_recvbuf / (current_time - echo_server->last_time);
+						echo_server->last_time = current_time;
+						echo_server->stat_recvbuf = 0;
+						printf("Speed %d KB\n", echo_server->stat_speed);
+						fflush(stdout);
+					}
 					/* Echo back */
-					Send(pos->fd, buf, strlen(buf), 0);
+					//Send(pos->fd, buf, strlen(buf), 0);
 				}
 				else { /* Peer disconnected */
-					free_cli(pos, &echo_server->cli);
-					printf("Now peer disconnected\n");
+					printf("Now peer disconnected(fd: %d, address: %s:%d)\n", pos->fd,
+						inet_ntoa(pos->from_addr.sin_addr), ntohs(pos->from_addr.sin_port));
 					fflush(stdout);
+					free_cli(pos, &echo_server->cli);
 				}
 			}
 		}

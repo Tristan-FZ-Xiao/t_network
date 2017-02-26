@@ -51,6 +51,7 @@ void set_non_block(int fd);
 void set_block(int fd);
 void set_reuse(int fd);
 int check_fd_stat(int fd);
+int send_tcp(int fd, const char *buf, int len);
 
 void err_ret(const char *fmt, ...);
 void err_sys(const char *fmt, ...);
