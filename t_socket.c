@@ -118,7 +118,7 @@ readn(int fd, void *vptr, size_t n)
 	nleft = n;
 	while (nleft > 0) {
 		if ((nread = read(fd, ptr, nleft)) < 0) {
-			if (errno == EINTR)
+			if (errno == EINTR || errno == EAGAIN)
 				nread = 0;		/* and call read() again */
 			else
 				return (-1);
@@ -279,3 +279,26 @@ int send_tcp(int fd, const char *buf, int len)
 	return sum;
 }
 
+void add_event(int epollfd, int fd, int state)
+{
+	struct epoll_event ev;
+	ev.events = state;
+	ev.data.fd = fd;
+	epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &ev);
+}
+
+void delete_event(int epollfd, int fd, int state)
+{
+	struct epoll_event ev;
+	ev.events = state;
+	ev.data.fd = fd;
+	epoll_ctl(epollfd, EPOLL_CTL_DEL, fd, &ev);
+}
+
+void modify_event(int epollfd, int fd, int state)
+{
+	struct epoll_event ev;
+	ev.events = state;
+	ev.data.fd = fd;
+	epoll_ctl(epollfd, EPOLL_CTL_MOD, fd, &ev);
+}

@@ -4,6 +4,7 @@
 #define	MAXLINE	1024		/* to see datagram truncation */
 
 #include	<arpa/inet.h>
+#include	<sys/epoll.h>
 #include	<errno.h>		/* for definition of errno */
 #include	<fcntl.h>
 #include	<netinet/in.h>
@@ -52,6 +53,9 @@ void set_block(int fd);
 void set_reuse(int fd);
 int check_fd_stat(int fd);
 int send_tcp(int fd, const char *buf, int len);
+void add_event(int epollfd, int fd, int state);
+void delete_event(int epollfd, int fd, int state);
+void modify_event(int epollfd, int fd, int state);
 
 void err_ret(const char *fmt, ...);
 void err_sys(const char *fmt, ...);
