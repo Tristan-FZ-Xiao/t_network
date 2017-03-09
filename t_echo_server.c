@@ -276,10 +276,40 @@ void t_echo_server_loop(server_info *echo_server)
 	close(echo_server->listen_fd);
 }
 
-int main(int argc, char *argv[])
+char *(*a)[3][5];
+
+int unit_test_echo_server(void)
 {
 	//unit_test_list();
 	t_echo_server_init(&echo_server_info);
 	t_echo_server_loop(&echo_server_info);
 	return 0;
+}
+
+void unit_test_tmp(void)
+{
+	int i = 100;
+	int b = (int)(((int *)0) + 4);
+
+	printf("!i %d !!i %d b %d\n", (!i), (!! i), b);
+	printf("%ld %ld\n", sizeof(a), sizeof(*a));
+}
+
+void timer_1(void *arg)
+{
+	printf("\nhello Timer %d\n", (*((int *)arg)));
+	add_timer(get_now_time() + 1000 * (1 + 2 * (*((int *)arg))), timer_1, arg);
+}
+
+int main(int argc, char *argv [])
+{
+	int i;
+	int a[128] = {};
+
+	for (i = 0; i < 2; i++) {
+		a[i] = i;
+		add_timer(get_now_time() + (2 * i + 1) * 1000, timer_1, &a[i]);
+	}
+	run_timer();
+	//unit_test_echo_server();
 }
