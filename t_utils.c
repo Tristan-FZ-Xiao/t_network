@@ -1,8 +1,13 @@
 #include <sys/time.h>
+#include <sys/select.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "t_utils.h"
 
@@ -14,7 +19,7 @@ unsigned int get_now_time(void)
 	return (unsigned int)(tv.tv_usec / 1000 + tv.tv_sec * 1000);
 }
 
-static timer_base t_timer_base;
+timer_base t_timer_base;
 
 timer_entry *get_timer_entry(timer_base *base, unsigned int timestamp)
 {
@@ -116,31 +121,71 @@ static void extrac_min(timer_base *base)
 	}
 }
 
+/*
+ *	Need to guarantee thread-safe between add_timer() and run_timer() 
+ */
 void add_timer(int timestamp, fn cb, void *arg)
 {
+	pthread_mutex_lock(&t_timer_base.lock);
 	timer_entry *ptr = get_timer_entry(&t_timer_base, timestamp);
 
 	if (ptr) {
 		ptr->cb = cb;
 		ptr->arg = arg;
 	}
+	pthread_mutex_unlock(&t_timer_base.lock);
 }
 
 void run_timer(void)
 {
 	timer_base *base = &t_timer_base;
 	int cur_time = 0;	/* In ms */
+
+	base->fd = mkfifo("/tmp/1.txt", O_CREAT | O_RDONLY);	
  
 	while (1) {
 		cur_time = get_now_time();
+
+		pthread_mutex_lock(&base->lock);
 		timer_entry *ptr = get_min(base);
-		if (ptr && (cur_time > ptr->timestamp)) {
-			if (ptr->cb)
-				ptr->cb(ptr->arg);
-			extrac_min(base);
+		if (ptr)
+		{
+			if (cur_time > ptr->timestamp)
+			{
+				pthread_mutex_unlock(&base->lock);
+				if (ptr->cb)
+					ptr->cb(ptr->arg);
+				pthread_mutex_lock(&base->lock);
+				extrac_min(base);
+				pthread_mutex_unlock(&base->lock);
+			}
+			else
+			{
+				struct timeval tv;
+				
+				tv.tv_sec = (ptr->timestamp - cur_time) / 1000;
+				tv.tv_usec = ((ptr->timestamp - cur_time) - tv.tv_sec * 1000) * 1000;
+				pthread_mutex_unlock(&base->lock);
+
+				FD_ZERO(&base->rfds);
+				FD_SET(base->fd, &base->rfds);
+				base->fdmax > base->fd ? base->fdmax : base->fd + 1; 
+				select(base->fdmax, &base->rfds, NULL, NULL, &tv);
+				if (FD_ISSET(base->fd, &base->rfds))
+				{
+					printf("now new add_timer() is arrivalled\n");
+				}
+			}
 		}
 		else {
-			usleep(1000000);
+			pthread_mutex_unlock(&base->lock);
 		}
 	}
+}
+
+void init_timer(void)
+{
+	timer_base *base = &t_timer_base;
+	pthread_mutex_init(&base->lock, NULL);
+	pthread_mutexattr_init(&base->attr);
 }

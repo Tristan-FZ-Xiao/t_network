@@ -298,7 +298,28 @@ void unit_test_tmp(void)
 void timer_1(void *arg)
 {
 	printf("\nhello Timer %d\n", (*((int *)arg)));
-	add_timer(get_now_time() + 1000 * (1 + 2 * (*((int *)arg))), timer_1, arg);
+	add_timer(get_now_time() + (1 + 2 * (*((int *)arg))), timer_1, arg);
+}
+
+void timer_thread_fn(void *arg)
+{
+	int a = 1000;
+
+	while (1) {
+		add_timer(get_now_time() + a, timer_1, &a);
+		printf("add timer(%d)\n", a);
+		a += 1000;
+		sleep(1);
+	}
+}
+
+void timer_thread(void)
+{
+	pid_t t_pid = 0;
+
+	pthread_mutexattr_settype(&t_timer_base.attr, PTHREAD_MUTEX_RECURSIVE);
+	pthread_create(&t_pid, &t_timer_base.attr, timer_thread_fn, NULL);
+	//pthread_detach(t_pid);
 }
 
 int main(int argc, char *argv [])
@@ -306,10 +327,15 @@ int main(int argc, char *argv [])
 	int i;
 	int a[128] = {};
 
+	init_timer();
+	timer_thread();
+ /*
 	for (i = 0; i < 2; i++) {
 		a[i] = i;
-		add_timer(get_now_time() + (2 * i + 1) * 1000, timer_1, &a[i]);
+		add_timer(get_now_time() + (2 * i + 1), timer_1, &a[i]);
 	}
+	add_timer(get_now_time() + (2 * i + 1), timer_1, &a[i]);
+ */
 	run_timer();
 	//unit_test_echo_server();
 }
